@@ -1,4 +1,3 @@
-// shop.js - Updated exit to show thank you from any category view
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } = require('discord.js');
 const { checkRegistration } = require('../utils');
 
@@ -144,6 +143,7 @@ module.exports = {
             return;
           }
 
+          // Deduct gold
           const newGold = player.gold - selectedItem.price;
           const { error: goldError } = await supabase
             .from('users')
@@ -161,31 +161,60 @@ module.exports = {
             return;
           }
 
-          const { data: existingItem, error: checkError } = await supabase
-            .from('inventory')
-            .select('quantity')
-            .eq('discord_id', user.id)
-            .eq('item_name', selectedItem.item_name)
-            .single();
-
+          // Handle inventory update
           let insertError;
-          if (checkError && checkError.code !== 'PGRST116') {
-            console.error('Error checking inventory:', checkError);
-          }
-
-          if (existingItem) {
-            const newQuantity = existingItem.quantity + 1;
-            ({ error: insertError } = await supabase
+          if (category === 'consumable') {
+            // Check for existing consumable
+            const { data: existingItem, error: checkError } = await supabase
               .from('inventory')
-              .update({ quantity: newQuantity })
+              .select('quantity')
               .eq('discord_id', user.id)
-              .eq('item_name', selectedItem.item_name));
+              .eq('item_name', selectedItem.item_name)
+              .eq('item_type', 'consumable')
+              .single();
+
+            if (checkError && checkError.code !== 'PGRST116') {
+              console.error('Error checking inventory:', checkError);
+              // Rollback gold
+              await supabase.from('users').update({ gold: player.gold }).eq('discord_id', user.id);
+              const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Purchase Failed')
+                .setDescription(`Error checking inventory: ${checkError.message}`)
+                .setFooter({ text: 'Dungeon Adventure' });
+              await i.editReply({ embeds: [errorEmbed], components: [row] });
+              return;
+            }
+
+            if (existingItem) {
+              // Increment quantity for consumables
+              const newQuantity = existingItem.quantity + 1;
+              ({ error: insertError } = await supabase
+                .from('inventory')
+                .update({ quantity: newQuantity })
+                .eq('discord_id', user.id)
+                .eq('item_name', selectedItem.item_name)
+                .eq('item_type', 'consumable'));
+            } else {
+              // Insert new consumable
+              ({ error: insertError } = await supabase
+                .from('inventory')
+                .insert({
+                  discord_id: user.id,
+                  item_type: 'consumable',
+                  item_name: selectedItem.item_name,
+                  slot: null,
+                  stats: selectedItem.stats || null,
+                  quantity: 1
+                }));
+            }
           } else {
+            // Handle non-consumables (armor, weapon, skill)
             const validSlots = {
               armor: ['helmet', 'chestplate', 'leggings', 'boots'],
               weapon: ['mainhand', 'offhand']
             };
-            const slotValue = validSlots[category]?.includes(selectedItem.slot) ? selectedItem.slot : (category === 'consumable' || category === 'skill' ? null : null);
+            const slotValue = validSlots[category]?.includes(selectedItem.slot) ? selectedItem.slot : (category === 'skill' ? null : null);
             ({ error: insertError } = await supabase
               .from('inventory')
               .insert({
@@ -194,12 +223,13 @@ module.exports = {
                 item_name: selectedItem.item_name,
                 slot: slotValue,
                 stats: selectedItem.stats || null,
-                quantity: 1
+                quantity: category === 'skill' ? null : 1 // Skills don't use quantity
               }));
           }
 
           if (insertError) {
             console.error('Error adding to inventory:', insertError);
+            // Rollback gold
             await supabase.from('users').update({ gold: player.gold }).eq('discord_id', user.id);
             const errorEmbed = new EmbedBuilder()
               .setColor('#FF0000')
@@ -209,6 +239,9 @@ module.exports = {
             await i.editReply({ embeds: [errorEmbed], components: [row] });
             return;
           }
+
+          // Update player gold for next interaction
+          player.gold = newGold;
 
           const successEmbed = new EmbedBuilder()
             .setColor('#00FF00')

@@ -1,4 +1,4 @@
-// index.js - Fixed command execution
+// index.js - Updated to route trial command to trials.js
 require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, MessageFlags } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
@@ -92,7 +92,8 @@ client.on('interactionCreate', async interaction => {
     } else if (commandName === 'dungeon') {
       await interaction.reply({ content: '🛠️ The dungeon is under construction. Check back soon for battles!', flags: [MessageFlags.Ephemeral] });
     } else if (commandName === 'trial') {
-      await interaction.reply({ content: '🛠️ Trials are under construction. Prepare for epic challenges soon!', flags: [MessageFlags.Ephemeral] });
+      const command = require('./commands/trials');
+      await command.execute(interaction, supabase);
     }
   } catch (error) {
     console.error('Error in interactionCreate:', error);

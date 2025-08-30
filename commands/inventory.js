@@ -1,4 +1,3 @@
-// inventory.js - Fixed inventory handling with current category display
 const { 
   SlashCommandBuilder, 
   ActionRowBuilder, 
@@ -32,7 +31,7 @@ module.exports = {
     try {
       const [{ data: inventory }, { data: player }] = await Promise.all([
         supabase.from('inventory').select('item_type, item_name, slot, stats, quantity').eq('discord_id', user.id),
-        supabase.from('users').select('equipped_armor, equipped_weapons, health, skills').eq('discord_id', user.id).single()
+        supabase.from('users').select('equipped_armor, equipped_weapons, health, strength, intelligence, defense, agility, skills').eq('discord_id', user.id).single()
       ]);
 
       let currentCategory = 'default';
@@ -89,11 +88,12 @@ module.exports = {
         return embed;
       };
 
+      // === UI builders ===
       const categoryOptions = [
-        { label: 'Armor', value: 'Armor' },
-        { label: 'Consumables', value: 'Consumable' },
-        { label: 'Skills', value: 'Skill' },
-        { label: 'Weapons', value: 'Weapon' }
+        { label: 'Armor', value: 'armor' },
+        { label: 'Consumables', value: 'consumable' },
+        { label: 'Skills', value: 'skill' },
+        { label: 'Weapons', value: 'weapon' }
       ];
 
       const buildCategoryMenu = (currentCat) => {
@@ -109,10 +109,10 @@ module.exports = {
         const filteredItems = (inventory || []).filter(item => item.item_type === currentCategory);
         return filteredItems.length > 0
           ? filteredItems.map((item, index) => ({
-            label: `${item.item_name}`,
-            description: `Qty: ${item.quantity}${item.slot ? ` | Slot: ${item.slot}` : ''}`,
-            value: index.toString()
-          })).slice(0, 25)
+              label: `${item.item_name}`,
+              description: `Qty: ${item.quantity}${item.slot ? ` | Slot: ${item.slot}` : ''}`,
+              value: index.toString()
+            })).slice(0, 25)
           : [{ label: 'No items available', value: 'none', description: 'This category is empty' }];
       };
 
@@ -172,6 +172,7 @@ module.exports = {
           const selectedIndex = parseInt(i.values[0]);
           const selectedItem = (inventory || []).filter(item => item.item_type === currentCategory)[selectedIndex];
           let resultEmbed;
+
           switch (selectedItem.item_type) {
             case 'armor':
               resultEmbed = new EmbedBuilder().setColor('#00BFFF').setTitle('🛡️ Armor Equipped').setDescription(await handleArmorEquip(selectedItem, player, user, supabase));
@@ -193,7 +194,15 @@ module.exports = {
         }
 
         else if (i.customId === 'continue') {
-          // Keep the current category instead of resetting to default
+          // Refresh inventory and player data after an action
+          const [newInventory, newPlayer] = await Promise.all([
+            supabase.from('inventory').select('item_type, item_name, slot, stats, quantity').eq('discord_id', user.id),
+            supabase.from('users').select('equipped_armor, equipped_weapons, health, strength, intelligence, defense, agility, skills').eq('discord_id', user.id).single()
+          ]);
+          inventory.length = 0; // Clear and update inventory
+          inventory.push(...(newInventory.data || []));
+          Object.assign(player, newPlayer.data); // Update player data
+          
           selectOptions = updateSelectOptions();
           selectMenu.setOptions(selectOptions).setDisabled(selectOptions[0].value === 'none');
           await i.editReply({ embeds: [buildInventoryEmbed(currentCategory, currentPage)], components: [actionRow, itemRow, navRow] });
@@ -220,27 +229,223 @@ module.exports = {
 async function handleArmorEquip(item, player, user, supabase) {
   const currentSlot = player.equipped_armor?.[item.slot]?.name;
   if (currentSlot === item.item_name) return `You already have ${item.item_name} equipped in ${item.slot}!`;
-  const { error } = await supabase.from('users').update({ equipped_armor: { ...player.equipped_armor, [item.slot]: { name: item.item_name, stats: item.stats } } }).eq('discord_id', user.id);
-  return error ? 'Failed to equip armor.' : `Equipped ${item.item_name} to ${item.slot}!`;
+
+  // Calculate stat changes
+  const currentStats = player.equipped_armor?.[item.slot]?.stats || {};
+  const newStats = item.stats || {};
+  const statChanges = {
+    strength: (newStats.strength || 0) - (currentStats.strength || 0),
+    intelligence: (newStats.intelligence || 0) - (currentStats.intelligence || 0),
+    defense: (newStats.defense || 0) - (currentStats.defense || 0),
+    agility: (newStats.agility || 0) - (currentStats.agility || 0),
+    health: (newStats.health || 0) - (currentStats.health || 0)
+  };
+
+  // Update equipped armor and stats
+  const { error } = await supabase
+    .from('users')
+    .update({
+      equipped_armor: { ...player.equipped_armor, [item.slot]: { name: item.item_name, stats: item.stats } },
+      strength: (player.strength || 0) + statChanges.strength,
+      intelligence: (player.intelligence || 0) + statChanges.intelligence,
+      defense: (player.defense || 0) + statChanges.defense,
+      agility: (player.agility || 0) + statChanges.agility,
+      health: (player.health || 0) + statChanges.health
+    })
+    .eq('discord_id', user.id);
+
+  if (error) return `Failed to equip ${item.item_name}.`;
+
+  // Decrease inventory quantity
+  const newQuantity = item.quantity - 1;
+  let inventoryError;
+  if (newQuantity <= 0) {
+    const { error } = await supabase
+      .from('inventory')
+      .delete()
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name)
+      .limit(1);
+    inventoryError = error;
+  } else {
+    const { error } = await supabase
+      .from('inventory')
+      .update({ quantity: newQuantity })
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name);
+    inventoryError = error;
+  }
+
+  return inventoryError ? `Equipped ${item.item_name} to ${item.slot}, but failed to update inventory.` : `Equipped ${item.item_name} to ${item.slot}!`;
 }
 
 async function handleWeaponEquip(item, player, user, supabase) {
   const currentSlot = player.equipped_weapons?.[item.slot]?.name;
   if (currentSlot === item.item_name) return `You already have ${item.item_name} equipped in ${item.slot}!`;
-  const { error } = await supabase.from('users').update({ equipped_weapons: { ...player.equipped_weapons, [item.slot]: { name: item.item_name, stats: item.stats } } }).eq('discord_id', user.id);
-  return error ? 'Failed to equip weapon.' : `Equipped ${item.item_name} to ${item.slot}!`;
+
+  // Calculate stat changes
+  const currentStats = player.equipped_weapons?.[item.slot]?.stats || {};
+  const newStats = item.stats || {};
+  const statChanges = {
+    strength: (newStats.strength || 0) - (currentStats.strength || 0),
+    intelligence: (newStats.intelligence || 0) - (currentStats.intelligence || 0),
+    defense: (newStats.defense || 0) - (currentStats.defense || 0),
+    agility: (newStats.agility || 0) - (currentStats.agility || 0),
+    health: (newStats.health || 0) - (currentStats.health || 0)
+  };
+
+  // Update equipped weapons and stats
+  const { error } = await supabase
+    .from('users')
+    .update({
+      equipped_weapons: { ...player.equipped_weapons, [item.slot]: { name: item.item_name, stats: item.stats } },
+      strength: (player.strength || 0) + statChanges.strength,
+      intelligence: (player.intelligence || 0) + statChanges.intelligence,
+      defense: (player.defense || 0) + statChanges.defense,
+      agility: (player.agility || 0) + statChanges.agility,
+      health: (player.health || 0) + statChanges.health
+    })
+    .eq('discord_id', user.id);
+
+  if (error) return `Failed to equip ${item.item_name}.`;
+
+  // Decrease inventory quantity
+  const newQuantity = item.quantity - 1;
+  let inventoryError;
+  if (newQuantity <= 0) {
+    const { error } = await supabase
+      .from('inventory')
+      .delete()
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name)
+      .limit(1);
+    inventoryError = error;
+  } else {
+    const { error } = await supabase
+      .from('inventory')
+      .update({ quantity: newQuantity })
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name);
+    inventoryError = error;
+  }
+
+  return inventoryError ? `Equipped ${item.item_name} to ${item.slot}, but failed to update inventory.` : `Equipped ${item.item_name} to ${item.slot}!`;
 }
 
 async function handleConsumable(item, player, user, supabase) {
-  const { error: deleteError } = await supabase.from('inventory').delete().eq('discord_id', user.id).eq('item_name', item.item_name).limit(1);
-  if (deleteError) return 'Failed to use consumable.';
-  const { error: updateError } = await supabase.from('users').update({ health: (player.health || 0) + 10 }).eq('discord_id', user.id);
-  return updateError ? 'Used consumable, but failed to update stats.' : `Used ${item.item_name}, +10 health!`;
+  // Fetch consumable stats from shop_consumables
+  const { data: consumable, error: fetchError } = await supabase
+    .from('shop_consumables')
+    .select('stats')
+    .eq('item_name', item.item_name)
+    .single();
+
+  if (fetchError || !consumable) {
+    return `Failed to fetch ${item.item_name} from shop_consumables. Please ensure the item exists in the shop.`;
+  }
+
+  // Initialize temporary stats
+  let tempStats = {
+    health: player.health, // Temporary health, capped at max
+    strength: player.strength || 0,
+    intelligence: player.intelligence || 0,
+    defense: player.defense || 0,
+    agility: player.agility || 0
+  };
+
+  // Check if all applicable effects are at max
+  let allAtMax = true;
+  let effectApplied = false;
+  let effectMessage = '';
+
+  if (consumable.stats?.health && tempStats.health < player.health) {
+    tempStats.health = Math.min(player.health, tempStats.health + consumable.stats.health);
+    effectApplied = true;
+    allAtMax = false;
+    effectMessage += `Restored ${consumable.stats.health} health (current: ${tempStats.health}/${player.health}). `;
+  } else if (consumable.stats?.health) {
+    effectMessage += `Health already at max (${player.health}). `;
+  }
+
+  if (consumable.stats?.strength && tempStats.strength < player.strength) {
+    tempStats.strength = Math.min(player.strength, tempStats.strength + consumable.stats.strength);
+    effectApplied = true;
+    allAtMax = false;
+    effectMessage += `Gained ${consumable.stats.strength} strength (current: ${tempStats.strength}/${player.strength}). `;
+  } else if (consumable.stats?.strength) {
+    effectMessage += `Strength already at max (${player.strength}). `;
+  }
+
+  if (!effectApplied && allAtMax) {
+    return `Cannot use ${item.item_name}: all affected stats are at their maximum!`;
+  }
+
+  if (!effectApplied) {
+    return `Used ${item.item_name}, but no valid effect applied.`;
+  }
+
+  // Decrease inventory quantity
+  const newQuantity = item.quantity - 1;
+  let updateError;
+  if (newQuantity <= 0) {
+    const { error } = await supabase
+      .from('inventory')
+      .delete()
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name)
+      .limit(1);
+    updateError = error;
+  } else {
+    const { error } = await supabase
+      .from('inventory')
+      .update({ quantity: newQuantity })
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name);
+    updateError = error;
+  }
+
+  if (updateError) {
+    return `Failed to update inventory for ${item.item_name}.`;
+  }
+
+  return `Used ${item.item_name}! ${effectMessage}`;
 }
 
 async function handleSkillUse(item, player, user, supabase) {
-  const { error } = await supabase.from('users').update({ skills: [...(player.skills || []), item.item_name] }).eq('discord_id', user.id);
-  if (error) return 'Failed to learn skill.';
-  const { error: deleteError } = await supabase.from('inventory').delete().eq('discord_id', user.id).eq('item_name', item.item_name).limit(1);
-  return deleteError ? 'Learned skill, but failed to remove from inventory.' : `Learned ${item.item_name}!`;
+  // Check if skill is already learned
+  if (player.skills?.includes(item.item_name)) {
+    return `You have already learned ${item.item_name}!`;
+  }
+
+  // Decrease inventory quantity
+  const newQuantity = item.quantity - 1;
+  let updateError;
+  if (newQuantity <= 0) {
+    const { error } = await supabase
+      .from('inventory')
+      .delete()
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name)
+      .limit(1);
+    updateError = error;
+  } else {
+    const { error } = await supabase
+      .from('inventory')
+      .update({ quantity: newQuantity })
+      .eq('discord_id', user.id)
+      .eq('item_name', item.item_name);
+    updateError = error;
+  }
+
+  if (updateError) {
+    return `Failed to update inventory for ${item.item_name}.`;
+  }
+
+  // Learn the skill
+  const { error } = await supabase
+    .from('users')
+    .update({ skills: [...(player.skills || []), item.item_name] })
+    .eq('discord_id', user.id);
+
+  return error ? `Failed to learn ${item.item_name}.` : `Learned ${item.item_name}!`;
 }
