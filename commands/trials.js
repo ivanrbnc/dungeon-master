@@ -6,7 +6,8 @@ module.exports = {
     .setName('trial')
     .setDescription('Participate in trials against powerful monsters'),
   async execute(interaction, supabase) {
-    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    // await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    await interaction.deferReply();
 
     const { user } = interaction;
 
@@ -134,71 +135,70 @@ module.exports = {
         await i.deferUpdate();
         collector.resetTimer({ time: 300000 });
 
-        // Disable consumable menu to prevent rapid clicks
-        consumableMenu.setDisabled(true);
-        await i.editReply({ embeds: [combatEmbed], components: [buttons, skillRow, consumableRow] });
+        // Initialize component states
+        consumableMenu.setDisabled(false); // Enable by default, disable only if needed
+        skillMenu.setDisabled(skillOptions[0].value === 'skill_none');
+        buttons.components.forEach(button => button.setDisabled(false)); // Ensure buttons are enabled
 
         // Reduce skill cooldowns
         let changed = false;
         for (const skill in cooldowns) {
-          if (cooldowns[skill] > 0) {
+            if (cooldowns[skill] > 0) {
             cooldowns[skill] = Math.max(0, cooldowns[skill] - 1);
             changed = true;
-          }
+            }
         }
         if (changed) {
-          const { error } = await supabase
+            const { error } = await supabase
             .from('users')
             .update({ skill_cooldowns: cooldowns })
             .eq('discord_id', user.id);
-          if (error) console.error('Error updating cooldowns:', error);
+            if (error) console.error('Error updating cooldowns:', error);
         }
 
         let actionResult = '';
         let damageToMonster = 0;
-        let damageToPlayer = 0; // Only apply damage if action is valid
+        let damageToPlayer = 0;
 
         if (i.customId === 'attack') {
-          // Calculate damage based on player strength and equipped weapons
-          damageToMonster = tempStats.strength;
-          if (player.equipped_weapons?.mainhand?.stats?.strength) {
+            // Calculate damage based on player strength and equipped weapons
+            damageToMonster = tempStats.strength;
+            if (player.equipped_weapons?.mainhand?.stats?.strength) {
             damageToMonster += player.equipped_weapons.mainhand.stats.strength;
-          }
-          if (player.equipped_weapons?.offhand?.stats?.strength) {
+            }
+            if (player.equipped_weapons?.offhand?.stats?.strength) {
             damageToMonster += player.equipped_weapons.offhand.stats.strength;
-          }
-          damageToMonster = Math.max(1, Math.floor(damageToMonster * (1 + tempStats.agility / 100)));
-          damageToPlayer = Math.max(1, monster.strength - Math.floor(tempStats.defense * 0.5));
-          actionResult = `You attacked for ${damageToMonster} damage! Monster deals ${damageToPlayer} damage.`;
+            }
+            damageToMonster = Math.max(1, Math.floor(damageToMonster * (1 + tempStats.agility / 100)));
+            damageToPlayer = Math.max(1, monster.strength - Math.floor(tempStats.defense * 0.5));
+            actionResult = `You attacked for ${damageToMonster} damage! Monster deals ${damageToPlayer} damage.`;
         } else if (i.customId === 'select_skill') {
-          if (i.values[0] === 'skill_none') {
-            consumableMenu.setDisabled(false);
+            if (i.values[0] === 'skill_none') {
             await i.editReply({ embeds: [combatEmbed], components: [buttons, skillRow, consumableRow] });
             return;
-          }
-          const skillIndex = parseInt(i.values[0].replace('skill_', ''));
-          const skillName = player.skills[skillIndex];
+            }
+            const skillIndex = parseInt(i.values[0].replace('skill_', ''));
+            const skillName = player.skills[skillIndex];
 
-          // Double-check cooldown
-          if (cooldowns[skillName] > 0) {
+            // Double-check cooldown
+            if (cooldowns[skillName] > 0) {
             actionResult = `${skillName} is on cooldown for ${cooldowns[skillName]} more actions!`;
             const updatedSkillOptions = (player.skills || []).reduce((options, skill, index) => {
-              if (!cooldowns[skill] || cooldowns[skill] <= 0) {
+                if (!cooldowns[skill] || cooldowns[skill] <= 0) {
                 options.push({ label: skill, value: `skill_${index}` });
-              }
-              return options;
+                }
+                return options;
             }, []);
             if (!updatedSkillOptions.length) {
-              updatedSkillOptions.push({ label: 'No skills available', value: 'skill_none', description: 'Learn skills or wait for cooldowns!' });
+                updatedSkillOptions.push({ label: 'No skills available', value: 'skill_none', description: 'Learn skills or wait for cooldowns!' });
             }
             skillMenu.setOptions(updatedSkillOptions.slice(0, 25)).setDisabled(updatedSkillOptions[0].value === 'skill_none');
-            consumableMenu.setDisabled(false);
             await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
             return;
-          }
+            }
 
-          // Fetch skill effect scale
-          const { data: skill } = await supabase
+            // Fetch skill effect scale
+            const { data: skill } = await supabase
             .from('shop_skills')
             .select('effect_scale')
             .eq('item_name', skillName)
@@ -206,210 +206,212 @@ module.exports = {
             .limit(1)
             .single();
 
-          if (skill) {
+            if (skill) {
             // Scale damage with intelligence and effect_scale
             damageToMonster = Math.floor(tempStats.intelligence * (skill.effect_scale / 100));
             damageToPlayer = Math.max(1, monster.strength - Math.floor(tempStats.defense * 0.5));
             cooldowns[skillName] = 3; // Set cooldown for 3 actions
             const { error } = await supabase
-              .from('users')
-              .update({ skill_cooldowns: cooldowns })
-              .eq('discord_id', user.id);
+                .from('users')
+                .update({ skill_cooldowns: cooldowns })
+                .eq('discord_id', user.id);
             if (error) console.error('Error setting cooldown:', error);
             actionResult = `Used ${skillName} for ${damageToMonster} damage! Monster deals ${damageToPlayer} damage.`;
-          } else {
+            } else {
             actionResult = `Error: ${skillName} not found in shop_skills.`;
             const updatedSkillOptions = (player.skills || []).reduce((options, skill, index) => {
-              if (!cooldowns[skill] || cooldowns[skill] <= 0) {
+                if (!cooldowns[skill] || cooldowns[skill] <= 0) {
                 options.push({ label: skill, value: `skill_${index}` });
-              }
-              return options;
+                }
+                return options;
             }, []);
             if (!updatedSkillOptions.length) {
-              updatedSkillOptions.push({ label: 'No skills available', value: 'skill_none', description: 'Learn skills or wait for cooldowns!' });
+                updatedSkillOptions.push({ label: 'No skills available', value: 'skill_none', description: 'Learn skills or wait for cooldowns!' });
             }
             skillMenu.setOptions(updatedSkillOptions.slice(0, 25)).setDisabled(updatedSkillOptions[0].value === 'skill_none');
-            consumableMenu.setDisabled(false);
             await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
             return;
-          }
+            }
         } else if (i.customId === 'select_consumable') {
-          if (i.values[0] === 'item_none') {
-            consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
-          const itemName = i.values[0].replace('item_', '');
+            if (i.values[0] === 'item_none') {
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed], components: [buttons, skillRow, consumableRow] });
+                return;
+            }
+            const itemName = i.values[0].replace('item_', '');
 
-          // Double-check item quantity in database
-          const { data: itemCheck, error: checkError } = await supabase
-            .from('inventory')
-            .select('quantity')
-            .eq('discord_id', user.id)
-            .eq('item_name', itemName)
-            .eq('item_type', 'consumable')
-            .single();
-          if (checkError || !itemCheck || itemCheck.quantity <= 0) {
-            actionResult = `You don't have any ${itemName} left!`;
-            // Refresh inventory from database
+            // Double-check item quantity in database
+            const { data: itemCheck, error: checkError } = await supabase
+                .from('inventory')
+                .select('quantity')
+                .eq('discord_id', user.id)
+                .eq('item_name', itemName)
+                .eq('item_type', 'consumable')
+                .single();
+            if (checkError || !itemCheck || itemCheck.quantity <= 0) {
+                actionResult = `You don't have any ${itemName} left!`;
+                // Refresh inventory from database
+                const { data: updatedInventory, error: inventoryError } = await supabase
+                .from('inventory')
+                .select('item_name, quantity')
+                .eq('discord_id', user.id)
+                .eq('item_type', 'consumable');
+                if (!inventoryError) {
+                inventoryItems = updatedInventory.reduce((acc, item) => {
+                    acc[item.item_name] = item.quantity;
+                    return acc;
+                }, {});
+                }
+                const updatedConsumableOptions = shopConsumables.reduce((options, item) => {
+                if (inventoryItems[item.item_name] > 0) {
+                    options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
+                }
+                return options;
+                }, []);
+                if (!updatedConsumableOptions.length) {
+                updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
+                }
+                consumableMenu.setOptions(updatedConsumableOptions.slice(0, 25)).setDisabled(updatedConsumableOptions[0].value === 'item_none');
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
+                return;
+            }
+
+            // Decrease inventory quantity
+            const newQuantity = itemCheck.quantity - 1;
+            const { error: updateError } = await supabase
+                .from('inventory')
+                .update({ quantity: newQuantity })
+                .eq('discord_id', user.id)
+                .eq('item_name', itemName)
+                .eq('item_type', 'consumable');
+
+            if (updateError) {
+                actionResult = `Failed to update inventory for ${itemName}.`;
+                console.error('Error updating inventory:', updateError);
+                // Refresh inventory from database to ensure consistency
+                const { data: updatedInventory, error: inventoryError } = await supabase
+                    .from('inventory')
+                    .select('item_name, quantity')
+                    .eq('discord_id', user.id)
+                    .eq('item_type', 'consumable');
+                if (!inventoryError) {
+                    inventoryItems = updatedInventory.reduce((acc, item) => {
+                        acc[item.item_name] = item.quantity;
+                        return acc;
+                    }, {});
+                }
+                const updatedConsumableOptions = shopConsumables.reduce((options, item) => {
+                if (inventoryItems[item.item_name] > 0) {
+                    options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
+                }
+                return options;
+                }, []);
+                if (!updatedConsumableOptions.length) {
+                updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
+                }
+                consumableMenu.setOptions(updatedConsumableOptions.slice(0, 25)).setDisabled(updatedConsumableOptions[0].value === 'item_none');
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
+                return;
+            }
+
+            // Update in-memory inventory
+            if (newQuantity <= 0) {
+                delete inventoryItems[itemName]; // Remove item from in-memory inventory
+            } else {
+                inventoryItems[itemName] = newQuantity; // Update quantity
+            }
+
+            // Refresh inventory data from database
             const { data: updatedInventory, error: inventoryError } = await supabase
-              .from('inventory')
-              .select('item_name, quantity')
-              .eq('discord_id', user.id)
-              .eq('item_type', 'consumable');
-            if (!inventoryError) {
-              inventoryItems = updatedInventory.reduce((acc, item) => {
+                .from('inventory')
+                .select('item_name, quantity')
+                .eq('discord_id', user.id)
+                .eq('item_type', 'consumable');
+            if (inventoryError) {
+                console.error('Error refreshing inventory:', inventoryError);
+                actionResult = `Failed to refresh inventory data after using ${itemName}.`;
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
+                return;
+            }
+            inventoryItems = updatedInventory.reduce((acc, item) => {
                 acc[item.item_name] = item.quantity;
                 return acc;
-              }, {});
-            }
+            }, {});
+
+            // Update consumable menu
             const updatedConsumableOptions = shopConsumables.reduce((options, item) => {
-              if (inventoryItems[item.item_name] > 0) {
+                if (inventoryItems[item.item_name] > 0) {
                 options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
-              }
-              return options;
+                }
+                return options;
             }, []);
             if (!updatedConsumableOptions.length) {
-              updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
+                updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
             }
             consumableMenu.setOptions(updatedConsumableOptions.slice(0, 25)).setDisabled(updatedConsumableOptions[0].value === 'item_none');
-            consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
 
-          // Decrease inventory quantity
-          const newQuantity = itemCheck.quantity - 1;
-          let updateError;
-          if (newQuantity <= 0) {
-            const { error } = await supabase
-              .from('inventory')
-              .delete()
-              .eq('discord_id', user.id)
-              .eq('item_name', itemName)
-              .eq('item_type', 'consumable')
-            //   .limit(1);
-            updateError = error;
-          } else {
-            const { error } = await supabase
-              .from('inventory')
-              .update({ quantity: newQuantity })
-              .eq('discord_id', user.id)
-              .eq('item_name', itemName)
-              .eq('item_type', 'consumable');
-            updateError = error;
-          }
+            // Fetch consumable stats
+            const { data: item } = await supabase
+                .from('shop_consumables')
+                .select('stats')
+                .eq('item_name', itemName)
+                .single();
 
-          if (updateError) {
-            actionResult = `Failed to update inventory for ${itemName}.`;
-            console.error('Error updating inventory:', updateError);
-            const updatedConsumableOptions = shopConsumables.reduce((options, item) => {
-              if (inventoryItems[item.item_name] > 0) {
-                options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
-              }
-              return options;
-            }, []);
-            if (!updatedConsumableOptions.length) {
-              updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
+            if (!item) {
+                actionResult = `Error: ${itemName} not found in shop_consumables.`;
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
+                return;
             }
-            consumableMenu.setOptions(updatedConsumableOptions.slice(0, 25)).setDisabled(updatedConsumableOptions[0].value === 'item_none');
-            consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
 
-          // Update in-memory inventory
-          inventoryItems[itemName] = newQuantity;
-
-          // Refresh inventory data from database
-          const { data: updatedInventory, error: inventoryError } = await supabase
-            .from('inventory')
-            .select('item_name, quantity')
-            .eq('discord_id', user.id)
-            .eq('item_type', 'consumable');
-          if (inventoryError) {
-            console.error('Error refreshing inventory:', inventoryError);
-            actionResult = `Failed to refresh inventory data after using ${itemName}.`;
-            consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
-          inventoryItems = updatedInventory.reduce((acc, item) => {
-            acc[item.item_name] = item.quantity;
-            return acc;
-          }, {});
-
-          // Update consumable menu
-          const updatedConsumableOptions = shopConsumables.reduce((options, item) => {
-            if (inventoryItems[item.item_name] > 0) {
-              options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
+            // Apply consumable effect
+            let effectApplied = false;
+            let effectMessage = '';
+            if (item.stats?.health && tempPlayerHealth < player.health) {
+                tempPlayerHealth = Math.min(player.health, tempPlayerHealth + item.stats.health);
+                effectApplied = true;
+                effectMessage += `Restored ${item.stats.health} health (current: ${tempPlayerHealth}/${player.health}). `;
+            } else if (item.stats?.health) {
+                effectMessage += `Health already at max (${player.health}). `;
             }
-            return options;
-          }, []);
-          if (!updatedConsumableOptions.length) {
-            updatedConsumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
-          }
-          consumableMenu.setOptions(updatedConsumableOptions.slice(0, 25)).setDisabled(updatedConsumableOptions[0].value === 'item_none');
 
-          // Fetch consumable stats
-          const { data: item } = await supabase
-            .from('shop_consumables')
-            .select('stats')
-            .eq('item_name', itemName)
-            .single();
+            if (item.stats?.strength && tempStats.strength < playerStats.strength) {
+                tempStats.strength = Math.min(playerStats.strength, tempStats.strength + item.stats.strength);
+                effectApplied = true;
+                effectMessage += `Gained ${item.stats.strength} strength (current: ${tempStats.strength}/${playerStats.strength}). `;
+            } else if (item.stats?.strength) {
+                effectMessage += `Strength already at max (${playerStats.strength}). `;
+            }
 
-          if (!item) {
-            actionResult = `Error: ${itemName} not found in shop_consumables.`;
+            if (!effectApplied) {
+                actionResult = `Cannot use ${itemName}: all affected stats are at their maximum!`;
+                consumableMenu.setDisabled(false);
+                await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
+                return;
+            }
+
+            actionResult = `Used ${itemName}! ${effectMessage}`;
             consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
+            } else if (i.customId === 'flee') {
+                // Reset skill cooldowns on flee
+                const { error } = await supabase
+                .from('users')
+                .update({ skill_cooldowns: {} })
+                .eq('discord_id', user.id);
+                if (error) console.error('Error resetting cooldowns on flee:', error);
 
-          // Apply consumable effect
-          let effectApplied = false;
-          let effectMessage = '';
-          if (item.stats?.health && tempPlayerHealth < player.health) {
-            tempPlayerHealth = Math.min(player.health, tempPlayerHealth + item.stats.health);
-            effectApplied = true;
-            effectMessage += `Restored ${item.stats.health} health (current: ${tempPlayerHealth}/${player.health}). `;
-          } else if (item.stats?.health) {
-            effectMessage += `Health already at max (${player.health}). `;
-          }
-
-          if (item.stats?.strength && tempStats.strength < playerStats.strength) {
-            tempStats.strength = Math.min(playerStats.strength, tempStats.strength + item.stats.strength);
-            effectApplied = true;
-            effectMessage += `Gained ${item.stats.strength} strength (current: ${tempStats.strength}/${playerStats.strength}). `;
-          } else if (item.stats?.strength) {
-            effectMessage += `Strength already at max (${playerStats.strength}). `;
-          }
-
-          if (!effectApplied) {
-            actionResult = `Cannot use ${itemName}: all affected stats are at their maximum!`;
-            consumableMenu.setDisabled(false);
-            await i.editReply({ embeds: [combatEmbed.setDescription(`Your Health: ❤️ ${tempPlayerHealth}\nMonster Health: 🖤 ${monsterHealth}\n${actionResult}`)], components: [buttons, skillRow, consumableRow] });
-            return;
-          }
-
-          actionResult = `Used ${itemName}! ${effectMessage}`;
-          consumableMenu.setDisabled(false);
-        } else if (i.customId === 'flee') {
-          // Reset skill cooldowns on flee
-          const { error } = await supabase
-            .from('users')
-            .update({ skill_cooldowns: {} })
-            .eq('discord_id', user.id);
-          if (error) console.error('Error resetting cooldowns on flee:', error);
-
-          const fleeEmbed = new EmbedBuilder()
-            .setColor('#808080')
-            .setTitle('🏃 Fled from Trial')
-            .setDescription(`You fled from the battle! All skill cooldowns have been reset.`)
-            .setFooter({ text: 'Dungeon Adventure' });
-          await i.editReply({ embeds: [fleeEmbed], components: [] });
-          collector.stop();
-          return;
-        }
+                const fleeEmbed = new EmbedBuilder()
+                .setColor('#808080')
+                .setTitle('🏃 Fled from Trial')
+                .setDescription(`You fled from the battle! All skill cooldowns have been reset.`)
+                .setFooter({ text: 'Dungeon Adventure' });
+                await i.editReply({ embeds: [fleeEmbed], components: [] });
+                collector.stop();
+                return;
+            }
 
         // Update temporary health values
         monsterHealth = Math.max(0, monsterHealth - damageToMonster);

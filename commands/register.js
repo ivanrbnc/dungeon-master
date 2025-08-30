@@ -8,7 +8,8 @@ module.exports = {
     .setDescription('Register yourself as a new player in the dungeon'),
   
   async execute(interaction, supabase) {
-    await interaction.deferReply({ ephemeral: true });
+    // await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     const { user } = interaction;
 

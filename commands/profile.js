@@ -7,7 +7,8 @@ module.exports = {
     .setName('profile')
     .setDescription('View your character profile.'),
   async execute(interaction, supabase) {
-    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    // await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    await interaction.deferReply();
 
     const { user } = interaction;
 

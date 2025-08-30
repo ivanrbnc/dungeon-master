@@ -14,7 +14,8 @@ module.exports = {
     .setName('inventory')
     .setDescription('Manage your inventory by equipping or using items.'),
   async execute(interaction, supabase) {
-    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    // await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    await interaction.deferReply();
 
     const { user } = interaction;
 

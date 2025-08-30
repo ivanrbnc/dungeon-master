@@ -6,7 +6,8 @@ module.exports = {
     .setName('shop')
     .setDescription('Browse and purchase items from the shop'),
   async execute(interaction, supabase) {
-    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    // await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    await interaction.deferReply();
 
     const { user } = interaction;
 
