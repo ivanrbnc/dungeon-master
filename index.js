@@ -1,4 +1,3 @@
-// index.js - Updated to route trial command to trials.js
 require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, MessageFlags } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
@@ -35,6 +34,12 @@ const commands = [
   new SlashCommandBuilder()
     .setName('trial')
     .setDescription('Participate in trials'),
+  new SlashCommandBuilder()
+    .setName('work')
+    .setDescription('Work to earn gold through various activities'),
+  new SlashCommandBuilder()
+    .setName('casino')
+    .setDescription('Gamble your gold with a 50% chance to double your bet'),
 ].map(command => command.toJSON());
 
 // Register commands when the bot is ready
@@ -93,6 +98,12 @@ client.on('interactionCreate', async interaction => {
       await interaction.reply({ content: '🛠️ The dungeon is under construction. Check back soon for battles!', flags: [MessageFlags.Ephemeral] });
     } else if (commandName === 'trial') {
       const command = require('./commands/trials');
+      await command.execute(interaction, supabase);
+    } else if (commandName === 'work') {
+      const command = require('./commands/work');
+      await command.execute(interaction, supabase);
+    } else if (commandName === 'casino') {
+      const command = require('./commands/casino');
       await command.execute(interaction, supabase);
     }
   } catch (error) {
