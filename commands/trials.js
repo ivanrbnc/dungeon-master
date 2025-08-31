@@ -477,12 +477,12 @@ module.exports = {
             while (newXp >= (newLevel * 50 + 50)) {
               newXp -= (newLevel * 50 + 50);
               newLevel += 1;
-              newHealth += 5;
-              newStrength += 5;
-              newDefense += 5;
-              newAgility += 5;
-              newIntelligence += 5;
-              levelUpMessage += `\nCongratulations! You leveled up to Level ${newLevel}! All stats +5.`;
+              newHealth += 1;
+              newStrength += 1;
+              newDefense += 1;
+              newAgility += 1;
+              newIntelligence += 1;
+              levelUpMessage += `\nCongratulations! You leveled up to Level ${newLevel}! All stats +1.`;
             }
 
             const newGold = player.gold + monster.rewards.gold;
