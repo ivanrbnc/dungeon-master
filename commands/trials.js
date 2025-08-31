@@ -92,18 +92,20 @@ module.exports = {
 
       const consumableOptions = shopConsumables.reduce((options, item) => {
         if (inventoryItems[item.item_name] > 0) {
-          options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
+            options.push({ label: `${item.item_name} (${inventoryItems[item.item_name]})`, value: `item_${item.item_name}` });
         }
         return options;
-      }, []);
-      if (!consumableOptions.length) {
-        consumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
-      }
+        }, []);
 
-      const consumableMenu = new StringSelectMenuBuilder()
+        // Add a placeholder option only if there are no consumables
+        if (!consumableOptions.length) {
+        consumableOptions.push({ label: 'No consumables available', value: 'item_none', description: 'Purchase consumables from the shop!' });
+        }
+
+        const consumableMenu = new StringSelectMenuBuilder()
         .setCustomId('select_consumable')
         .setPlaceholder('Use a consumable...')
-        .setDisabled(consumableOptions[0].value === 'item_none')
+        .setDisabled(!consumableOptions.length || consumableOptions[0].value === 'item_none') // Disable if no valid consumables
         .addOptions(consumableOptions.slice(0, 25));
 
       const buttons = new ActionRowBuilder()
