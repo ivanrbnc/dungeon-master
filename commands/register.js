@@ -1,4 +1,3 @@
-// Updated register.js - Fixed export format and flags
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const { checkRegistration } = require('../utils');
 
@@ -8,25 +7,22 @@ module.exports = {
     .setDescription('Register yourself as a new player in the dungeon'),
   
   async execute(interaction, supabase) {
-    // await interaction.deferReply({ ephemeral: true });
     await interaction.deferReply();
 
     const { user } = interaction;
 
-    // Check if already registered
     const isRegistered = await checkRegistration(interaction, supabase);
     if (isRegistered) {
       const embed = new EmbedBuilder()
         .setColor('#FF4500')
         .setTitle('🚫 Already Registered')
-        .setDescription(`You're already registered, ${user.username}! Use \`/inventory\` to check your stats and items.`)
+        .setDescription(`You're already registered, ${user.username}! Use \`/profile\` to check your stats and items.`)
         .setThumbnail(user.displayAvatarURL())
         .setFooter({ text: 'Dungeon Adventure' });
       await interaction.editReply({ embeds: [embed] });
       return;
     }
 
-    // Register new user
     console.log(`Registering new user: ${user.username} (${user.id})`);
     const { error: insertError } = await supabase.from('users').insert({
       discord_id: user.id,
@@ -40,7 +36,9 @@ module.exports = {
       equipped_armor: {},
       equipped_weapons: {},
       skills: [],
-      skill_cooldowns: {} 
+      skill_cooldowns: {},
+      xp: 0,
+      level: 1
     });
 
     if (insertError) {
@@ -54,12 +52,13 @@ module.exports = {
       return;
     }
 
-    // Gamey welcome embed
     const welcomeEmbed = new EmbedBuilder()
       .setColor('#00FF00')
       .setTitle(`🎉 Welcome to the Dungeon, ${user.username}! 🎉`)
       .setThumbnail(user.displayAvatarURL())
       .addFields(
+        { name: '🧬 Level', value: '1', inline: true },
+        { name: '📈 XP', value: '0/100', inline: true },
         { name: '❤️ Health', value: '100', inline: true },
         { name: '💪 Strength', value: '10', inline: true },
         { name: '🛡️ Defense', value: '10', inline: true },
@@ -75,7 +74,7 @@ module.exports = {
         { name: '📚 Skills', value: 'None', inline: false },
         { name: '🎒 Inventory', value: 'Empty', inline: false }
       )
-      .setDescription('Your adventure begins now... Use `/inventory` to manage your gear!')
+      .setDescription('Your adventure begins now... Use `/profile` to view your stats!')
       .setFooter({ text: 'Dungeon Adventure | Page 1/1' });
 
     await interaction.editReply({ embeds: [welcomeEmbed] });
