@@ -40,6 +40,24 @@ const commands = [
   new SlashCommandBuilder()
     .setName('casino')
     .setDescription('Gamble your gold with a 50% chance to double your bet'),
+  new SlashCommandBuilder()
+    .setName('chat')
+    .setDescription('Chat with AI')
+    .addStringOption(option =>
+      option
+        .setName('message')
+        .setDescription('Your message to the AI')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('reminder')
+    .setDescription('Set a reminder for an enemy spell in Mobile Legends')
+    .addStringOption(option =>
+      option
+        .setName('hero')
+        .setDescription('The enemy hero using the spell')
+        .setRequired(true)
+    ),
 ].map(command => command.toJSON());
 
 // Register commands when the bot is ready
@@ -105,6 +123,12 @@ client.on('interactionCreate', async interaction => {
     } else if (commandName === 'casino') {
       const command = require('./commands/casino');
       await command.execute(interaction, supabase);
+    } else if (commandName === 'chat') {
+      const command = require('./commands/chat');
+      await command.execute(interaction);
+    } else if (commandName === 'reminder') {
+      const command = require('./commands/reminder');
+      await command.execute(interaction);
     }
   } catch (error) {
     console.error('Error in interactionCreate:', error);
