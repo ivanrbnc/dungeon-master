@@ -58,6 +58,9 @@ const commands = [
         .setDescription('The enemy hero using the spell')
         .setRequired(true)
     ),
+  new SlashCommandBuilder()
+    .setName('hero-rank')
+    .setDescription('Show trending heroes in Mobile Legends based on pick rate'),
 ].map(command => command.toJSON());
 
 // Register commands when the bot is ready
@@ -128,6 +131,9 @@ client.on('interactionCreate', async interaction => {
       await command.execute(interaction);
     } else if (commandName === 'reminder') {
       const command = require('./commands/reminder');
+      await command.execute(interaction);
+    } else if (commandName === 'hero-rank') {
+      const command = require('./commands/hero-rank');
       await command.execute(interaction);
     }
   } catch (error) {
