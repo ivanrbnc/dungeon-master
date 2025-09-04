@@ -39,7 +39,7 @@ module.exports = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'moonshotai/kimi-k2:free',
+          model: 'deepseek/deepseek-chat-v3.1:free',
           messages: [
             {
               role: 'user',

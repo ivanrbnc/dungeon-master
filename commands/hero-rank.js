@@ -110,11 +110,11 @@ module.exports = {
     const resultEmbed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle(`🏆 Trending Heroes (${rank.charAt(0).toUpperCase() + rank.slice(1)}, Last ${days} Days)`)
-      .setDescription(`Sorted by ${sortField.replace('_', ' ').replace('rate', ' Rate')}:`)
+      .setDescription(`Sorted by ${sortField.replace('_', ' ').replace('rate', ' rate')}:`)
       .addFields(
         heroes.map((hero, index) => ({
           name: `${index + 1}. ${hero.mainHero}`,
-          value: `Pick Rate: ${hero.pickRate}\nBan Rate: ${hero.banRate}\nWin Rate: ${hero.winRate}\nCounter Heroes: ${hero.counterHeroes}`
+          value: `Pick Rate: ${hero.pickRate}\nBan Rate: ${hero.banRate}\nWin Rate: ${hero.winRate}\nCounter To: ${hero.counterHeroes}`
         }))
       )
       .setFooter({ text: 'Dungeon Adventure' });
