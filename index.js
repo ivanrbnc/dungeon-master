@@ -61,6 +61,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName('hero-rank')
     .setDescription('Show trending heroes in Mobile Legends based on pick rate'),
+  new SlashCommandBuilder()
+    .setName('update-heroes')
+    .setDescription('Update heroes statistics from the API'),
 ].map(command => command.toJSON());
 
 // Register commands when the bot is ready
@@ -135,6 +138,9 @@ client.on('interactionCreate', async interaction => {
     } else if (commandName === 'hero-rank') {
       const command = require('./commands/hero-rank');
       await command.execute(interaction);
+    } else if (commandName === 'update-heroes') {
+      const command = require('./commands/update-heroes');
+      await command.execute(interaction, supabase);
     }
   } catch (error) {
     console.error('Error in interactionCreate:', error);
