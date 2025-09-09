@@ -63,7 +63,19 @@ const commands = [
     .setDescription('Show trending heroes in Mobile Legends based on pick rate'),
   new SlashCommandBuilder()
     .setName('update-heroes')
-    .setDescription('Update heroes statistics from the API'),
+    .setDescription('Update hero statistics and roles from the API'),
+  new SlashCommandBuilder()
+    .setName('draft-pick')
+    .setDescription('Start a MLBB draft pick process')
+    .addStringOption(option =>
+      option.setName('pick-order')
+        .setDescription('Choose your pick order: first or second')
+        .setRequired(true)
+        .addChoices(
+          { name: 'First Pick', value: 'first' },
+          { name: 'Second Pick', value: 'second' }
+        )
+    ),
 ].map(command => command.toJSON());
 
 // Register commands when the bot is ready
@@ -140,6 +152,9 @@ client.on('interactionCreate', async interaction => {
       await command.execute(interaction);
     } else if (commandName === 'update-heroes') {
       const command = require('./commands/update-heroes');
+      await command.execute(interaction, supabase);
+    } else if (commandName === 'draft-pick') {
+      const command = require('./commands/draft-pick');
       await command.execute(interaction, supabase);
     }
   } catch (error) {
