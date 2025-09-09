@@ -19,11 +19,11 @@ All gameplay actions are persisted in Supabase, ensuring a seamless multiplayer 
 
 The database stores all the core data that powers the Dungeon Master bot, including:
 
-- **Player accounts** (users table with RPG stats, items, cooldowns, etc.)
-- **Game mechanics** (heroes, monsters, trials, unique items)
-- **Shops** (armors, consumables, skills, weapons)
-- **Inventory system** tied to Discord IDs
-- **Row-Level Security (RLS) policies** to restrict or allow bot interactions
+- **Player accounts** (users table with RPG stats, items, cooldowns, etc.)  
+- **Game mechanics** (heroes, monsters, trials, unique items)  
+- **Shops** (armors, consumables, skills, weapons)  
+- **Inventory system** tied to Discord IDs  
+- **Row-Level Security (RLS) policies** to restrict or allow bot interactions  
 
 ## 🗄️ Tables
 
@@ -57,93 +57,156 @@ This repo includes:
 ## 📑 Table Configurations
 
 ### users
-| Column        | Type      | Constraints |
-|---------------|----------|-------------|
-| id            | uuid     | PK, default gen_random_uuid() |
-| discord_id    | text     | UNIQUE |
-| username      | text     | NOT NULL |
-| level         | int      | DEFAULT 1 |
-| xp            | int      | DEFAULT 0 |
-| gold          | int      | DEFAULT 0 |
+| Column                     | Type                     | Default | Notes |
+|-----------------------------|--------------------------|---------|-------|
+| id                          | uuid                     | null    | PK |
+| discord_id                  | text                     | null    | NOT NULL |
+| username                    | text                     | null    | NOT NULL |
+| level                       | integer                  | 1       |  |
+| xp                          | integer                  | 0       |  |
+| gold                        | integer                  | 0       |  |
+| health                      | integer                  | 100     |  |
+| strength                    | integer                  | 10      |  |
+| intelligence                | integer                  | 10      |  |
+| defense                     | integer                  | 10      |  |
+| agility                     | integer                  | 10      |  |
+| equipped_armor              | jsonb                    | '{}'    |  |
+| equipped_weapons            | jsonb                    | '{}'    |  |
+| skills                      | json                     | '[]'    |  |
+| skill_cooldowns             | jsonb                    | '{}'    |  |
+| cooldowns                   | jsonb                    | '{}'    |  |
+| max_floor                   | integer                  | 0       |  |
+| instance_id                 | uuid                     | null    |  |
+| email, phone, role, etc.    | various (text/json/timestamp) | null | Supabase auth fields |
 
 **Policies:**  
 - Bot role can SELECT, INSERT, UPDATE, DELETE.  
 
+---
+
 ### inventory
-| Column      | Type  | Constraints |
-|-------------|-------|-------------|
-| id          | uuid  | PK |
-| user_id     | uuid  | FK → users.id |
-| item_id     | uuid  | FK → shop tables / unique_items |
-| quantity    | int   | DEFAULT 1 |
+| Column      | Type   | Default                                | Notes |
+|-------------|--------|----------------------------------------|-------|
+| id          | integer| nextval('inventory_id_seq')            | PK |
+| discord_id  | text   | null                                   | FK → users.discord_id |
+| item_type   | text   | null                                   | NOT NULL |
+| item_name   | text   | null                                   | NOT NULL |
+| slot        | text   | null                                   |  |
+| stats       | jsonb  | '{}'                                   |  |
+| quantity    | int    | 1                                      |  |
 
 **Policies:**  
 - Restricted per user; bot manages inventory.  
 
+---
+
 ### heroes
-| Column       | Type  | Constraints |
-|--------------|-------|-------------|
-| hero_id      | int   | PK |
-| name         | text  | UNIQUE |
-| roles        | text  |  |
-| lanes        | text  |  |
-| pick_rate    | json  |  |
-| ban_rate     | json  |  |
-| win_rate     | json  |  |
-| counter_to   | text  |  |
-| countered_by | text  |  |
-| compatible_with | text | |
-
-**Policies:**  
-- Read-only for bot (no player modification).  
-
-### monsters
-| Column     | Type  | Constraints |
-|------------|-------|-------------|
-| id         | uuid  | PK |
-| name       | text  | UNIQUE |
-| hp         | int   | NOT NULL |
-| attack     | int   | NOT NULL |
-| defense    | int   | NOT NULL |
-| reward_xp  | int   | NOT NULL |
-| reward_gold| int   | NOT NULL |
-| floor      | int   | NOT NULL |
+| Column         | Type     | Default | Notes |
+|----------------|----------|---------|-------|
+| hero_id        | integer  | null    | PK |
+| name           | text     | null    |  |
+| roles          | text     | null    |  |
+| lanes          | text     | null    |  |
+| counter_to     | text     | null    |  |
+| countered_by   | text     | null    |  |
+| compatible_with| text     | null    |  |
+| pick_rate      | numeric  | null    |  |
+| ban_rate       | numeric  | null    |  |
+| win_rate       | numeric  | null    |  |
 
 **Policies:**  
 - Read-only for bot.  
 
+---
+
+### monsters
+| Column      | Type     | Default | Notes |
+|-------------|----------|---------|-------|
+| id          | integer  | null    | PK |
+| name        | text     | null    | NOT NULL |
+| floor       | integer  | null    | NOT NULL |
+| health      | integer  | null    | NOT NULL |
+| strength    | integer  | null    | NOT NULL |
+| defense     | integer  | null    | NOT NULL |
+| agility     | integer  | null    | NOT NULL |
+| intelligence| integer  | null    | NOT NULL |
+| rewards     | jsonb    | null    | NOT NULL |
+
+**Policies:**  
+- Read-only for bot.  
+
+---
+
 ### trials
-| Column      | Type  | Constraints |
-|-------------|-------|-------------|
-| id          | uuid  | PK |
-| user_id     | uuid  | FK → users.id |
-| floor       | int   | NOT NULL |
-| progress    | text  | DEFAULT 'in_progress' |
+| Column     | Type     | Default                          | Notes |
+|------------|----------|----------------------------------|-------|
+| id         | integer  | nextval('trials_id_seq')         | PK |
+| discord_id | text     | null                             | NOT NULL |
+| floor      | integer  | null                             | NOT NULL |
 
 **Policies:**  
 - Bot can update player progress.  
 
-### shop_armors, shop_weapons, shop_skills, shop_consumables
-| Column      | Type  | Constraints |
-|-------------|-------|-------------|
-| id          | uuid  | PK |
-| name        | text  | UNIQUE |
-| price       | int   | NOT NULL |
-| stats       | json  |  |
+---
 
-**Policies:**  
-- Read-only for bot.  
+### shop_armors
+| Column   | Type    | Default                                | Notes |
+|----------|---------|----------------------------------------|-------|
+| id       | integer | nextval('shop_armors_id_seq')          | PK |
+| item_name| text    | null                                   | NOT NULL |
+| slot     | text    | null                                   | NOT NULL |
+| stats    | jsonb   | '{}'                                   |  |
+| price    | integer | null                                   | NOT NULL |
+
+---
+
+### shop_consumables
+| Column   | Type    | Default                                | Notes |
+|----------|---------|----------------------------------------|-------|
+| id       | integer | nextval('shop_consumables_id_seq')     | PK |
+| item_name| text    | null                                   | NOT NULL |
+| stats    | jsonb   | '{}'                                   |  |
+| price    | integer | null                                   | NOT NULL |
+
+---
+
+### shop_skills
+| Column       | Type    | Default                             | Notes |
+|--------------|---------|-------------------------------------|-------|
+| id           | integer | nextval('shop_skills_id_seq')       | PK |
+| item_name    | text    | null                                | NOT NULL |
+| price        | integer | null                                | NOT NULL |
+| effect_scale | integer | 10                                  | NOT NULL |
+| cooldown     | integer | null                                |  |
+
+---
+
+### shop_weapons
+| Column   | Type    | Default | Notes |
+|----------|---------|---------|-------|
+| id       | integer | null    | PK |
+| item_name| text    | null    | NOT NULL |
+| slot     | text    | null    |  |
+| stats    | jsonb   | null    |  |
+| price    | integer | null    | NOT NULL |
+
+---
 
 ### unique_items
-| Column      | Type  | Constraints |
-|-------------|-------|-------------|
-| id          | uuid  | PK |
-| name        | text  | UNIQUE |
-| effect      | text  | NOT NULL |
-| rarity      | text  | NOT NULL |
+| Column       | Type    | Default | Notes |
+|--------------|---------|---------|-------|
+| id           | integer | null    | PK |
+| item_name    | text    | null    | NOT NULL |
+| item_type    | text    | null    | NOT NULL |
+| slot         | text    | null    |  |
+| stats        | jsonb   | null    |  |
+| effect_scale | integer | null    |  |
+| cooldown     | integer | null    |  |
 
 **Policies:**  
 - Read-only for bot.  
+
+---
 
 ## 🚀 Getting Started
 
