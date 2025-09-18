@@ -13,7 +13,7 @@ The **Dungeon Master Bot** is a game bot designed for Discord, enabling players 
 - Manage inventories and unique items  
 - Gain XP, gold, and levels  
 
-All gameplay actions are persisted in Supabase, ensuring a seamless multiplayer RPG experience inside Discord.
+All gameplay actions are persisted in Supabase, ensuring a seamless singleplayer RPG experience inside Discord.
 
 ## 📖 Overview
 
